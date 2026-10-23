@@ -1,0 +1,206 @@
+TableName,Expression
+fato_produto,"let
+    Fonte = Csv.Document(File.Contents(bis_outputs & ""fatos_hist_mu_mod.csv""),[Delimiter="";"", Columns=9, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+    #""Cabeçalhos Promovidos"" = Table.PromoteHeaders(Fonte, [PromoteAllScalars=true]),
+    #""Colunas Renomeadas1"" = Table.RenameColumns(#""Cabeçalhos Promovidos"",{{""valor"", ""valor_bruto""}}),
+    #""Tipo Alterado"" = Table.TransformColumnTypes(#""Colunas Renomeadas1"",{{""cd_mu"", Int64.Type}, {""cd_produto"", Int64.Type}, {""ano"", Int64.Type}, {""cd_origem"", Int64.Type}, {""area_ha"", type number}, {""producao_t"", type number}, {""valor_bruto"", type number}, {""rebanho"", type number}, {""abate"", type number}}),
+    #""Colunas Renomeadas"" = Table.RenameColumns(#""Tipo Alterado"",{{""valor_bruto"", ""valor""}})
+in
+    #""Colunas Renomeadas"""
+fato_energetico,"let
+    Fonte = fato_produto,
+    #""CMescladas - inner"" = Table.NestedJoin(Fonte, {""cd_produto""}, fator_produto_energetico, {""cd_produto""}, ""fator_produto_energetico"", JoinKind.Inner),
+    #""fator_produto_energetico Expandido"" = Table.ExpandTableColumn(#""CMescladas - inner"", ""fator_produto_energetico"", {""fcoprod"", ""fcoprod_unid"", ""fcoleta"", ""cd_energetico""}, {""fcoprod"", ""fcoprod_unid"", ""fcoleta"", ""cd_energetico""}),
+    #""PAdicionada - coproduto"" = Table.AddColumn(#""fator_produto_energetico Expandido"", ""q_coproduto"", each if [rebanho] <> null then [rebanho]*[fcoprod] else 
+[producao_t]*[fcoprod]),
+    #""PAdicionada - energetico"" = Table.AddColumn(#""PAdicionada - coproduto"", ""q_energetico"", each [q_coproduto]*[fcoleta]),
+    #""Colunas Removidas"" = Table.RemoveColumns(#""PAdicionada - energetico"",{""area_ha"", ""producao_t"", ""valor"", ""rebanho"", ""cd_produto"", ""abate""}),
+    #""Consultas Mescladas1"" = Table.NestedJoin(#""Colunas Removidas"", {""cd_energetico""}, dim_energetico, {""cd_energetico""}, ""dim_energetico"", JoinKind.LeftOuter),
+    #""dim_energetico Expandido"" = Table.ExpandTableColumn(#""Consultas Mescladas1"", ""dim_energetico"", {""materia_seca"", ""rotas_possiveis""}, {""materia_seca"", ""rotas_possiveis""}),
+    #""Tipo Alterado"" = Table.TransformColumnTypes(#""dim_energetico Expandido"",{{""q_coproduto"", type number}, {""q_energetico"", type number}}),
+    #""Colunas Renomeadas"" = Table.RenameColumns(#""Tipo Alterado"",{{""fcoprod"", ""fcoprod_u""}})
+in
+    #""Colunas Renomeadas"""
+fato_combustivel,"let
+    Fonte = fato_energetico,
+    #""Consultas Mescladas"" = Table.NestedJoin(Fonte, {""cd_energetico""}, fator_energetico_combustivel, {""cd_energetico""}, ""fator_energetico_combustivel"", JoinKind.LeftOuter),
+    #""fator_energetico_combustivel Expandido"" = Table.ExpandTableColumn(#""Consultas Mescladas"", ""fator_energetico_combustivel"", {""cd_combustivel"", ""fdens"", ""fdens_unid"", ""fmetanizacao"", ""rota_modelo""}, {""cd_combustivel"", ""fdens"", ""fdens_unid"", ""fmetanizacao"", ""rota_modelo""}),
+    #""LFilt - cd_combustivel= null"" = Table.SelectRows(#""fator_energetico_combustivel Expandido"", each ([cd_combustivel] <> null)),
+    #""Colunas Removidas2"" = Table.RemoveColumns(#""LFilt - cd_combustivel= null"",{""fcoprod_u"", ""fcoprod_unid"", ""fcoleta"", ""q_coproduto""}),
+    #""Consultas Mescladas1"" = Table.NestedJoin(#""Colunas Removidas2"", {""rota_modelo""}, dim_rota_modelo, {""rota_modelo""}, ""dim_rota"", JoinKind.LeftOuter),
+    #""dim_rota Expandido"" = Table.ExpandTableColumn(#""Consultas Mescladas1"", ""dim_rota"", {""cd_rota_modelo""}, {""cd_rota_modelo""}),
+    #""PAdicionada - qct"" = Table.AddColumn(#""dim_rota Expandido"", ""qct"", each [q_energetico]*[fdens]*[materia_seca]),
+    #""PAdicionada - vct"" = Table.AddColumn(#""PAdicionada - qct"", ""vct"", each [q_energetico]*[fmetanizacao]/1000),
+    #""Tipo Alterado"" = Table.TransformColumnTypes(#""PAdicionada - vct"",{{""qct"", type number}, {""vct"", type number}}),
+    #""Colunas Removidas1"" = Table.RemoveColumns(#""Tipo Alterado"",{""q_energetico"", ""materia_seca""})
+in
+    #""Colunas Removidas1"""
+dim_produto,"let
+    Fonte = Csv.Document(File.Contents(bis_outputs & ""dim_produto.csv""),[Delimiter="";"", Columns=9, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+    #""Cabeçalhos Promovidos"" = Table.PromoteHeaders(Fonte, [PromoteAllScalars=true]),
+    #""Tipo Alterado"" = Table.TransformColumnTypes(#""Cabeçalhos Promovidos"",{{""cd_subclasse"", Int64.Type}, {""cd_produto"", Int64.Type}})
+in
+    #""Tipo Alterado"""
+dim_energetico,"let
+    Fonte = Csv.Document(File.Contents(bis_outputs & ""dim_energetico.csv""),[Delimiter="";"", Columns=10, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+    #""Cabeçalhos Promovidos"" = Table.PromoteHeaders(Fonte, [PromoteAllScalars=true]),
+    #""Tipo Alterado"" = Table.TransformColumnTypes(#""Cabeçalhos Promovidos"",{{""cd_energetico"", Int64.Type}, {""teor_mo"", type number}, {""materia_seca"", type number}, {""cd_subclasse"", Int64.Type}, {""cd_rota"", Int64.Type}}),
+    #""Personalização Adicionada"" = Table.AddColumn(#""Tipo Alterado"", ""#"", each 1),
+    #""Consultas Mescladas"" = Table.NestedJoin(#""Personalização Adicionada"", {""cd_rota""}, dim_rota, {""cd_rota""}, ""dim_rota"", JoinKind.LeftOuter),
+    #""dim_rota Expandido"" = Table.ExpandTableColumn(#""Consultas Mescladas"", ""dim_rota"", {""rotas_possiveis""}, {""rotas_possiveis""})
+in
+    #""dim_rota Expandido"""
+dim_combustivel,"let
+    Fonte = Csv.Document(File.Contents(bis_outputs & ""dim_combustivel.csv""),[Delimiter="";"", Columns=15, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+    #""Cabeçalhos Promovidos"" = Table.PromoteHeaders(Fonte, [PromoteAllScalars=true]),
+    #""Tipo Alterado"" = Table.TransformColumnTypes(#""Cabeçalhos Promovidos"",{{""cd_combustivel"", Int64.Type}, {""densidade"", type number}, {""pcs"", type number}, {""pci"", type number}}),
+    #""Erros Substituídos"" = Table.ReplaceErrorValues(#""Tipo Alterado"", {{""densidade"", null}, {""pcs"", null}, {""pci"", null}}),
+    #""Coluna dividida"" = Table.TransformColumns(#""Erros Substituídos"", {{""pci"", each _ / 10000, type number}})
+in
+    #""Coluna dividida"""
+dim_ano,"let
+    Fonte = Csv.Document(File.Contents(bis_outputs & ""dim_ano.csv""),[Delimiter="";"", Columns=10, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+    #""Cabeçalhos Promovidos"" = Table.PromoteHeaders(Fonte, [PromoteAllScalars=true]),
+    #""Tipo Alterado"" = Table.TransformColumnTypes(#""Cabeçalhos Promovidos"",{{""ano"", Int64.Type}, {""ano_i"", Int64.Type}, {""ano_f"", Int64.Type}, {""ano_base"", Int64.Type}})
+in
+    #""Tipo Alterado"""
+dim_rota_cenario,"let
+    Fonte = Csv.Document(File.Contents(""X:\Biocombustiveis - Diretorio\Técnico\Produtos\SIEnergia\bd\dim_pbi\dim_rota_cenario.csv""),[Delimiter="";"", Columns=6, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+    #""Colunas Removidas"" = Table.RemoveColumns(Fonte,{""Column1""}),
+    #""Cabeçalhos Promovidos"" = Table.PromoteHeaders(#""Colunas Removidas"", [PromoteAllScalars=true]),
+    #""Tipo Alterado"" = Table.TransformColumnTypes(#""Cabeçalhos Promovidos"",{{""cd_rota_cenario"", Int64.Type}}),
+    #""Linhas Filtradas"" = Table.SelectRows(#""Tipo Alterado"", each ([rota_cenario] <> null)),
+    #""Tipo Alterado1"" = Table.TransformColumnTypes(#""Linhas Filtradas"",{{""Densificação"", type number}, {""Biodigestão"", type number}, {""cd_rota_cenario"", Int64.Type}, {""rota_cenario"", type text}, {""rota_cenario_sigla"", type text}}),
+    #""Personalização Adicionada"" = Table.AddColumn(#""Tipo Alterado1"", ""#"", each 1)
+in
+    #""Personalização Adicionada"""
+dim_mu,"let
+    Fonte = Csv.Document(File.Contents(bis_outputs & ""dim_mu.csv""),[Delimiter="";"", Columns=19, Encoding=65001, QuoteStyle=QuoteStyle.Csv]),
+    #""Cabeçalhos Promovidos"" = Table.PromoteHeaders(Fonte, [PromoteAllScalars=true]),
+    #""Tipo Alterado"" = Table.TransformColumnTypes(#""Cabeçalhos Promovidos"",{{""cd_mu"", Int64.Type}, {""cd_micro"", Int64.Type}, {""cd_meso"", Int64.Type}, {""cd_uf"", Int64.Type}}),
+    #""Colunas Renomeadas"" = Table.RenameColumns(#""Tipo Alterado"",{{""uf_sigla"", ""UF""}, {""municipio"", ""Municipio""}, {""uf"", ""uf_nome""}})
+in
+    #""Colunas Renomeadas"""
+dim_uf,"let
+    Fonte = Csv.Document(File.Contents(bis_outputs & ""dim_uf.csv""),[Delimiter="";"", Columns=8, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+    #""Cabeçalhos Promovidos"" = Table.PromoteHeaders(Fonte, [PromoteAllScalars=true]),
+    #""Tipo Alterado"" = Table.TransformColumnTypes(#""Cabeçalhos Promovidos"",{{""cd_uf"", Int64.Type}})
+in
+    #""Tipo Alterado"""
+dim_rotas_possiveis,"let
+    Fonte = fato_energetico,
+    #""Outras Colunas Removidas"" = Table.SelectColumns(Fonte,{""rotas_possiveis""}),
+    #""Duplicatas Removidas"" = Table.Distinct(#""Outras Colunas Removidas""),
+    #""Linhas Filtradas"" = Table.SelectRows(#""Duplicatas Removidas"", each ([rotas_possiveis] <> ""N"")),
+    #""Índice Adicionado"" = Table.AddIndexColumn(#""Linhas Filtradas"", ""cd_rotas_possiveis"", 1, 1, Int64.Type)
+in
+    #""Índice Adicionado"""
+dim_rota_modelo,"let
+    Fonte = Csv.Document(File.Contents(""X:\Biocombustiveis - Diretorio\Técnico\Produtos\SIEnergia\bd\dim_pbi\dim_rota_modelo.csv""),[Delimiter="";"", Columns=3, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+    #""Colunas Removidas"" = Table.RemoveColumns(Fonte,{""Column1""}),
+    #""Cabeçalhos Promovidos"" = Table.PromoteHeaders(#""Colunas Removidas"", [PromoteAllScalars=true]),
+    #""Tipo Alterado"" = Table.TransformColumnTypes(#""Cabeçalhos Promovidos"",{{""cd_rota_modelo"", Int64.Type}})
+in
+    #""Tipo Alterado"""
+fato_populacao_mu,"let
+    Fonte = Csv.Document(File.Contents(bis_outputs & ""fatos_populacao_mu.csv""),[Delimiter="";"", Columns=4, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+    #""Cabeçalhos Promovidos"" = Table.PromoteHeaders(Fonte, [PromoteAllScalars=true]),
+    #""Tipo Alterado"" = Table.TransformColumnTypes(#""Cabeçalhos Promovidos"",{{""cd_mu"", Int64.Type}, {""ano"", Int64.Type}, {""populacao"", type number}})
+in
+    #""Tipo Alterado"""
+fator_rota,"let
+    Fonte = fator_energetico_combustivel,
+    #""Consultas Mescladas"" = Table.NestedJoin(Fonte, {""cd_energetico""}, dim_energetico, {""cd_energetico""}, ""dim_energetico"", JoinKind.LeftOuter),
+    #""dim_energetico Expandido"" = Table.ExpandTableColumn(#""Consultas Mescladas"", ""dim_energetico"", {""rotas_possiveis""}, {""rotas_possiveis""}),
+    #""Outras Colunas Removidas"" = Table.SelectColumns(#""dim_energetico Expandido"",{""cd_combustivel"", ""rotas_possiveis""}),
+    #""Duplicatas Removidas"" = Table.Distinct(#""Outras Colunas Removidas""),
+    #""Consultas Mescladas1"" = Table.NestedJoin(#""Duplicatas Removidas"", {""rotas_possiveis""}, dim_rotas_possiveis, {""rotas_possiveis""}, ""dim_rotas_possiveis"", JoinKind.LeftOuter),
+    #""dim_rotas_possiveis Expandido"" = Table.ExpandTableColumn(#""Consultas Mescladas1"", ""dim_rotas_possiveis"", {""cd_rotas_possiveis""}, {""cd_rotas_possiveis""}),
+    #""Consultas Mescladas2"" = Table.NestedJoin(#""dim_rotas_possiveis Expandido"", {""cd_combustivel""}, dim_combustivel, {""cd_combustivel""}, ""dim_combustivel"", JoinKind.LeftOuter),
+    #""dim_combustivel Expandido"" = Table.ExpandTableColumn(#""Consultas Mescladas2"", ""dim_combustivel"", {""combustivel""}, {""combustivel""}),
+    #""Personalização Adicionada"" = Table.AddColumn(#""dim_combustivel Expandido"", ""#"", each 1),
+    #""Consultas Mescladas3"" = Table.NestedJoin(#""Personalização Adicionada"", {""#""}, dim_rota_cenario, {""#""}, ""dim_rota_cenario"", JoinKind.LeftOuter),
+    #""dim_rota_cenario Expandido"" = Table.ExpandTableColumn(#""Consultas Mescladas3"", ""dim_rota_cenario"", {""cd_rota_cenario"", ""rota_cenario""}, {""cd_rota_cenario"", ""rota_cenario""}),
+    #""Linhas Classificadas"" = Table.Sort(#""dim_rota_cenario Expandido"",{{""rota_cenario"", Order.Ascending}, {""rotas_possiveis"", Order.Ascending}, {""combustivel"", Order.Ascending}}),
+    #""Colunas Reordenadas"" = Table.ReorderColumns(#""Linhas Classificadas"",{""cd_rota_cenario"", ""rota_cenario"", ""cd_combustivel"", ""rotas_possiveis"", ""cd_rotas_possiveis"", ""combustivel"", ""#""}),
+    #""Personalização Adicionada2"" = Table.AddColumn(#""Colunas Reordenadas"", ""fator_rota"", each if [rota_cenario]= ""Biodigestão"" 
+and [rotas_possiveis]= ""Biod. e Densif."" 
+and [combustivel]= ""Briquete"" 
+then 0 else
+
+if [rotas_possiveis]= ""Biodigestão"" 
+and [combustivel]= ""Briquete"" 
+then 0 else
+
+if [rotas_possiveis]= ""Densificação"" 
+and [combustivel]= ""Biometano"" 
+then 0 else
+
+if [rota_cenario]= ""Densificação"" 
+and [rotas_possiveis]= ""Biod. e Densif."" 
+and [combustivel]= ""Biometano"" 
+then 0 else
+
+if [rota_cenario]= ""Meio-a-meio"" and [rotas_possiveis]= ""Biod. e Densif."" then 0.5 else
+
+
+//if [rota_cenario]= ""Biodigestão"" 
+//and [rotas_possiveis]= ""Biod. e Densif."" 
+//and [combustivel]= ""Briquete"" 
+//then 0 else
+
+//if [rota_cenario]= ""Biodigestão"" 
+//and [rotas_possiveis]= ""Biodigestão"" 
+//and [combustivel]= ""Briquete"" 
+//then 0 else
+
+//if [rota_cenario]= ""Biodigestão"" 
+//and [rotas_possiveis]= ""Densificação"" 
+//and [combustivel]= ""Biometano"" 
+//then 0 else
+
+1),
+    #""Tipo Alterado"" = Table.TransformColumnTypes(#""Personalização Adicionada2"",{{""fator_rota"", type number}}),
+    #""Colunas Removidas"" = Table.RemoveColumns(#""Tipo Alterado"",{""#""}),
+    #""Valor Substituído"" = Table.ReplaceValue(#""Colunas Removidas"",0,null,Replacer.ReplaceValue,{""fator_rota""})
+in
+    #""Valor Substituído"""
+derivados_petroleo_mu,"let
+    Fonte = Table.Combine({diesel_mu, galosina_mu}),
+    #""Consultas Mescladas"" = Table.NestedJoin(Fonte, {""combustivel""}, dim_combustivel, {""combustivel""}, ""dim_combustivel"", JoinKind.LeftOuter),
+    #""dim_combustivel Expandido"" = Table.ExpandTableColumn(#""Consultas Mescladas"", ""dim_combustivel"", {""cd_combustivel"", ""combustivel_2"", ""densidade"", ""pci""}, {""cd_combustivel"", ""combustivel_2"", ""densidade"", ""pci""}),
+    #""Personalização Adicionada"" = Table.AddColumn(#""dim_combustivel Expandido"", ""venda_ktep"", each [venda_litro]*[densidade]*[pci]/1000000/1000),
+    #""Tipo Alterado"" = Table.TransformColumnTypes(#""Personalização Adicionada"",{{""combustivel"", type text}, {""venda_ktep"", type number}}),
+    #""Consultas Mescladas1"" = Table.NestedJoin(#""Tipo Alterado"", {""cd_mu""}, trechos, {""CD_MUN""}, ""trechos"", JoinKind.LeftOuter),
+    #""trechos Expandido"" = Table.ExpandTableColumn(#""Consultas Mescladas1"", ""trechos"", {""CD_MUN""}, {""CD_MUN""}),
+    #""Personalização Adicionada1"" = Table.AddColumn(#""trechos Expandido"", ""caminho"", each if [CD_MUN] <> null then ""Caminho da Safra"" else ""Fora do Caminho"")
+in
+    #""Personalização Adicionada1"""
+dim_combustiveis_venda,"let
+    Fonte = derivados_petroleo_mu,
+    #""Outras Colunas Removidas"" = Table.SelectColumns(Fonte,{""combustivel"", ""cd_combustivel"", ""combustivel_2""}),
+    #""Duplicatas Removidas"" = Table.Distinct(#""Outras Colunas Removidas"", {""combustivel""})
+in
+    #""Duplicatas Removidas"""
+dim_caminho,"let
+    Fonte = derivados_petroleo_mu,
+    #""Outras Colunas Removidas"" = Table.SelectColumns(Fonte,{""caminho""}),
+    #""Duplicatas Removidas"" = Table.Distinct(#""Outras Colunas Removidas"")
+in
+    #""Duplicatas Removidas"""
+dim_rota,"let
+    Fonte = Csv.Document(File.Contents(bis_outputs & ""dim_rota.csv""),[Delimiter="";"", Columns=3, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+    #""Cabeçalhos Promovidos"" = Table.PromoteHeaders(Fonte, [PromoteAllScalars=true]),
+    #""Tipo Alterado"" = Table.TransformColumnTypes(#""Cabeçalhos Promovidos"",{{""cd_rota"", Int64.Type}})
+in
+    #""Tipo Alterado"""
+dim_subclasse,"let
+    Fonte = Csv.Document(File.Contents(bis_outputs & ""dim_subclasse.csv""),[Delimiter="";"", Columns=16, Encoding=65001, QuoteStyle=QuoteStyle.Csv]),
+    #""Cabeçalhos Promovidos"" = Table.PromoteHeaders(Fonte, [PromoteAllScalars=true]),
+    #""Tipo Alterado"" = Table.TransformColumnTypes(#""Cabeçalhos Promovidos"",{{""cd_subclasse"", Int64.Type}})
+in
+    #""Tipo Alterado"""
+vendas-anuais-de-oleo-diesel-por-municipio,"let
+    Fonte = Csv.Document(File.Contents(""X:\Biocombustiveis - Diretorio\Técnico\Produtos\SIEnergia\BASE DE DADOS\ANP\vendas-anuais-de-oleo-diesel-por-municipio.csv""),[Delimiter="";"", Columns=7, Encoding=65001, QuoteStyle=QuoteStyle.None])
+in
+    Fonte"

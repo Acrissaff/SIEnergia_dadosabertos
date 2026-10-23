@@ -1,0 +1,148 @@
+TableName,Name,Expression,DisplayFolder,Description
+fato_produto,Nº Município_Produção,"//if(HASONEVALUE('Dim_Subsetor'[N2_Setor]),
+DISTINCTCOUNT(fato_produto[Cd_MU])  //)",,
+fato_produto,Produção (mil t),"if(SUM(fato_produto[producao_t])=0,BLANK(),SUM(fato_produto[producao_t])/1000)",,
+fato_produto,Rebanho (mil cbç),"if(SUM(fato_produto[rebanho])=0,BLANK(),SUM(fato_produto[rebanho])/1000)",,
+fato_produto,Área (mil ha),"if(SUM([area_ha])=0,BLANK(),SUM([area_ha])/1000)",,
+fato_produto,Rend. (kg/ha),"
+SUMX(dim_produto,
+if(fato_produto[Produção (mil t)]=0,BLANK(),
+CALCULATE(
+    SUM(fato_produto[producao_t]),fato_produto[area_ha]<>BLANK())
+*1000 / 
+SUM(fato_produto[area_ha]) ))",,
+fato_produto,Lotação (cbç/ha),"
+if(AND(fato_produto[Área (mil ha)]>30, fato_produto[Rebanho (mil cbç)]>30),               
+    if(CALCULATE(fato_produto[Rebanho (mil cbç)]/[Área (mil ha)],dim_produto[produto_2]=""Bovino"")<100, CALCULATE(fato_produto[Rebanho (mil cbç)]/[Área (mil ha)],dim_produto[produto_2]=""Bovino""))
+    , BLANK()) ",,
+fato_produto,Produção RSU (t),"CALCULATE(fato_produto[Produção (mil t)],'dim_subclasse'[s4_divisao]=""Resíduo"")",,
+fato_produto,Produção Agric. (t),"
+CALCULATE(fato_produto[Produção (mil t)],dim_subclasse[s4_divisao]=""Agrícola"")",,
+fato_produto,Produção (unid.),fato_produto[Produção (mil t)]+[Rebanho (mil cbç)],,
+fato_produto,Geração (kg/hab/dia),"
+//if(HASONEVALUE(dim_produto[cd_produto]),
+(CALCULATE(sum(fato_produto[producao_t]),dim_subclasse[s5_secao]=""Saneamento"")/365/sum(fato_populacao_mu[populacao])*1000)
+//)",,
+fato_energetico,Nº Município_Energético,"COUNTX(dim_mu,'fato_energetico'[Energético (mil t)])",,
+fato_energetico,Energético (mil t),"if(SUM([q_energetico])=0,BLANK(),SUM([q_energetico])/1000)",,
+fato_energetico,FCoprod_,AVERAGE(fato_energetico[fcoprod_u]),,
+fato_energetico,Coproduto (mil t),SUM([q_coproduto])/1000,,
+fato_energetico,F.Coleta,"
+//if(ISBLANK([IPR]); 
+if(ISBLANK([F.Coprod.]), BLANK(), AVERAGE([fcoleta]))",,
+fato_energetico,F.Coprod.,"
+if(HASONEVALUE(dim_energetico[energetico]), [FCoprod_])",,
+fato_energetico,Energético (%),"[Energético (mil t)] / CALCULATE([Energético (mil t)],all(Dim_MU),all(dim_produto), all(dim_energetico), all(dim_subclasse)
+)",,
+fato_combustivel,F.Densif.,"
+    //if(HASONEVALUE('dim_cen_rota'[rota]),
+	//if(HASONEVALUE(dim_energetico[energetico]), 
+    if(ISBLANK([F.Coprod.]), BLANK(), 
+    AVERAGE([FDens])    )
+    //))",,
+fato_combustivel,F.Metan.,"// Fator de Metanização
+if(HASONEVALUE(dim_energetico[energetico]),
+AVERAGE([fmetanizacao]))",,
+fato_combustivel,Rotas Possíveis,"
+if(DISTINCTCOUNT(fato_combustivel[rotas_possiveis])=1, DISTINCT(fato_combustivel[rotas_possiveis]), BLANK())",,
+fato_combustivel,vct_calc,SUM(fato_combustivel[vct]),,
+fato_combustivel,qct_calc,sum(fato_combustivel[qct]),,
+fato_combustivel,Combustivel (mil t),"
+
+sumx(dim_rota_cenario,	sumx(dim_combustivel,  SUMX(dim_rotas_possiveis,  //sumx(dim_energetico, 
+
+CALCULATE(sum('fator_rota'[fator_rota])
+,FILTER(fator_rota,fator_rota[cd_rota_cenario] = dim_rota_cenario[cd_rota_cenario])
+//,FILTER(fator_rota,fator_escolha[cd_energetico] = dim_energetico[cd_energetico])
+,FILTER(fator_rota,fator_rota[cd_combustivel] = dim_combustivel[cd_combustivel])
+,FILTER(fator_rota, fator_rota[cd_rotas_possiveis] = dim_rotas_possiveis[cd_rotas_possiveis])
+)
+*
+fato_combustivel[qct_calc]/1000
+))  )   //)",,
+fato_combustivel,Combustível (M m3),"
+
+sumx(dim_rota_cenario,	sumx(dim_combustivel,   SUMX(dim_rotas_possiveis, //sumx(dim_energetico,
+
+CALCULATE(sum('fator_rota'[fator_rota])
+,FILTER(fator_rota,fator_rota[cd_rota_cenario] = dim_rota_cenario[cd_rota_cenario])
+//,FILTER(fator_escolha,fator_escolha[cd_energetico] = dim_energetico[cd_energetico])
+,FILTER(fator_rota,fator_rota[cd_combustivel] = dim_combustivel[cd_combustivel])
+,FILTER(fator_rota, fator_rota[cd_rotas_possiveis] = dim_rotas_possiveis[cd_rotas_possiveis])
+)
+*
+fato_combustivel[vct_calc] /1000
+))  )   //)",,
+fato_combustivel,Combustível (ktep),"
+if(HASONEVALUE('dim_rota_cenario'[rota_cenario]), 
+SUMX(dim_combustivel,
+'fato_combustivel'[Combustível (M m3)]*[PCI]
++'fato_combustivel'[Combustivel (mil t)]*[PCI])) ",,
+fato_combustivel,PCI,"
+if(HASONEVALUE(dim_combustivel[Cd_Combustivel]),
+if(AND([Combustível (M m3)]=BLANK(),'fato_combustivel'[Combustivel (mil t)]=BLANK()),BLANK(),
+AVERAGE(dim_combustivel[pci])))",,
+fato_combustivel,RCald,"//Rendimento da Caldeira (para exibição)
+if(HASONEVALUE(dim_combustivel[Cd_Combustivel]),
+if([RCald_]=1,BLANK(),
+[RCald_] ))",,
+fato_combustivel,RTurb,"//Rendimento Elétrico
+if(HASONEVALUE(dim_combustivel[Cd_Combustivel]),[RTurb_], BLANK())",,
+fato_combustivel,Calor (TJ),"
+SUMX(dim_combustivel,
+if([RCald]=BLANK(),BLANK(),
+[Combustível (ktep)]*[RCald]*41.87))",,
+fato_combustivel,RCald_,"//Rendimento da Caldeira (para cálculo)
+if(ISBLANK([Combustível (ktep)]),BLANK(),
+if(fato_combustivel[Combustivel (mil t)]<>BLANK(),0.80,
+if(fato_combustivel[Combustível (M m3)]<>BLANK(),1,
+BLANK())))",,
+fato_combustivel,Eletricidade (GWh),"
+SUMX(dim_combustivel,
+[Combustível (ktep)]*[RTE]*11.63
+)",,
+fato_combustivel,RTurb_,"//Rendimento Elétrico
+if(ISBLANK([Combustível (ktep)]),BLANK(),
+if(fato_combustivel[Combustivel (mil t)]<>BLANK(),0.25,
+if(fato_combustivel[Combustível (M m3)]<>BLANK(),0.3,
+BLANK())))",,
+fato_combustivel,Potência (MW),"
+SUMX(dim_combustivel,
+[Eletricidade (GWh)]/(8760*[FCap_]) //))
+) *1000",,
+fato_combustivel,FCap_,0.8,,
+fato_combustivel,FCap,"//Fator de Capacidade
+if(HASONEVALUE(dim_combustivel[Cd_Combustivel]),if([Combustível (ktep)]<>BLANK(),[FCap_]))
+",,
+fato_combustivel,Município_Energia,"COUNTX(Dim_MU,[Combustível (ktep)])",,
+fato_combustivel,Combustivel (%),"[Combustível (ktep)] / CALCULATE([Combustível (ktep)],all(Dim_MU),all(dim_produto), all(dim_combustivel), all(dim_energetico), all(dim_subclasse))",,
+dim_energetico,Rotas,"
+if(ISBLANK([F.Coprod.]), BLANK(), 
+if(DISTINCTCOUNT(dim_energetico[rotas_possiveis])=1, DISTINCT(dim_energetico[rotas_possiveis]), BLANK())
+)",,
+dim_energetico,M.Seca,"
+if(ISBLANK([F.Coprod.]), BLANK(), 
+AVERAGE(dim_energetico[materia_seca]))",,
+dim_ano,Ano Selecionado,"
+if(DISTINCTCOUNT(dim_ano[ano])=1,DISTINCT(dim_ano[ano]),MIN(dim_ano[ano])&"" a ""&MAX(dim_ano[ano]))
+//""Vários Anos"")))))))",,
+dim_mu,UF Selecionada,"
+if(DISTINCTCOUNT(dim_mu[UF])=27,
+    ""Brasil"",
+    if(DISTINCTCOUNT(dim_mu[UF])=1,
+        DISTINCT(dim_mu[uf_nome]),
+        CONCATENATEX(DISTINCT(dim_mu[UF]),dim_mu[UF],"", "")))",,
+fato_populacao_mu,População,SUM(fato_populacao_mu[populacao]),,
+fato_combustivel,Combustível (TJ),"
+SUMX(dim_combustivel,
+
+[Combustível (ktep)]*41.87
+)",,
+fato_combustivel,RTE,[RCald_]*[RTurb],,
+fato_combustivel,Biometano (ktep),fato_combustivel[Combustível (M m3)]*0.88,,
+derivados_petroleo_mu,Combustível vendido (ktep),"
+SUM(derivados_petroleo_mu[venda_ktep])",,
+derivados_petroleo_mu,Balanço O&D (ktep),[Biometano (ktep)] - [Combustível vendido (ktep)],,
+fato_combustivel,Energia (TJ),"
+    ([Eletricidade (GWh)]*3.6)",,
+fato_combustivel,Energia (%),"[Energia (TJ)] / CALCULATE([Energia (TJ)],all(Dim_MU),all(dim_produto), all(dim_combustivel), all(dim_energetico), all(dim_subclasse))",,

@@ -1,0 +1,335 @@
+﻿MEMORIAL DE CÁLCULO — DO PRODUTO AGROPECUÁRIO AO POTENCIAL ENERGÉTICO
+=====================================================================
+
+Este documento descreve, etapa por etapa, como o arquivo
+sienergia_potencial_energetico_mu.csv chega dos dados de produção agropecuária aos dois
+valores de potencial em ktep. Cada termo das fórmulas corresponde a uma coluna do próprio
+arquivo, na ordem em que aparecem — a linha é o memorial.
+
+As fórmulas são as do modelo SIEnergia (SIEnergia-hml.pbix), reimplementadas em Python.
+A tradução query a query está em MAPEAMENTO_MODELO.txt.
+
+------------------------------------------------------------------------------
+
+Visão geral
+-----------
+
+                  producao_t  ou  rebanho  ou  abate
+                                  │
+                                  │  × fcoprod
+                                  ▼
+                          q_coproduto_t   [t]
+                                  │
+                                  │  × fcoleta
+                                  ▼
+                         q_energetico_t   [t]
+                                  │
+                  ┌───────────────┴───────────────┐
+                  │                               │
+       × fdens × materia_seca          × fmetanizacao ÷ 1000
+                  ▼                               ▼
+              qct  [t]                      vct  [mil m³]
+                  │                               │
+            ÷ 1000 × pci_densif           ÷ 1000 × pci_biodig
+                  ▼                               ▼
+      potencial_rota_densificacao   potencial_rota_biodigestao
+                [ktep]                         [ktep]
+
+As duas pontas são hipóteses mutuamente exclusivas — "e se 100% deste coproduto
+fosse por esta rota?" — e não devem ser somadas.
+
+------------------------------------------------------------------------------
+
+Etapa 0 — a base de cálculo
+---------------------------
+
+  Coluna      Unidade  Origem
+  ----------  -------  -------------------------------------
+  producao_t  t        produção agrícola do município no ano
+  rebanho     cabeças  efetivo pecuário do município no ano
+  abate       cabeças  animais abatidos no município no ano
+
+O modelo escolhe uma das três:
+
+    base = abate        se `abate` estiver preenchida
+         = rebanho      se `rebanho` estiver preenchida
+         = producao_t   caso contrário
+
+Os testes são sobre nulo, não sobre zero: um rebanho igual a zero ainda é pecuária e
+segue por aquele ramo. Seis produtos usam rebanho (Bovino de corte, Bovino de leite,
+Suíno - matriz, Suíno de corte, Frango, Galinha); três usam abate (Carcaça de bovino -
+Total, Carcaça de suíno, Carcaça de ave); os demais usam producao_t.
+
+A ordem importa: os produtos de abate trazem também producao_t — o peso de carcaça —,
+que não é a base da conta. Se o teste de abate não viesse primeiro, o ramo de
+producao_t capturaria a linha, e sem nenhum sinal de erro. Entre abate e rebanho a
+ordem é indiferente: as duas colunas nunca estão preenchidas na mesma linha.
+
+No arquivo, apenas a coluna efetivamente usada vem preenchida; as outras ficam
+vazias. Quando as três estão vazias, não há dado de produção para aquele
+município-ano-produto. São 11.697 linhas de 2023/2024: 2.649 de Esgoto coletado e 9.048
+dos seis coprodutos de RDO/RPU coletado, sem reporte do indicador SINISA de origem. A
+cadeia resolve em zero nas rotas aplicáveis.
+
+    O ramo de abate foi incorporado ao Power BI em 01/09/2026. A query
+    fato_energetico usa a mesma prioridade descrita acima. O histórico da correção e a
+    forma expandida do M estão em RESIDUOS_ABATE.txt (RESIDUOS_ABATE.txt) e
+    docs/m/fato_energetico_CORRIGIDO.m.
+
+Etapa 1 — produção → coproduto
+------------------------------
+
+    q_coproduto_t = base × fcoprod
+
+  Termo               Coluna         Unidade
+  ------------------  -------------  ------------------------------
+  fator de coproduto  fcoprod        ver fcoprod_unid
+  resultado           q_coproduto_t  t, ou m³ nos resíduos de abate
+
+fcoprod_unid diz a unidade do fator: t/t para lavoura (tonelada de coproduto por
+tonelada de produto), t/animal para pecuária (tonelada por cabeça) e m³/cabeça
+abatida para os resíduos de indústria de abate (metro cúbico de efluente por animal
+abatido). É o que torna a conta dimensionalmente coerente nos três ramos — e, no último
+caso, o que faz q_coproduto_t carregar metros cúbicos apesar do sufixo do nome.
+
+Este é o coproduto gerado — a palha que fica no campo, o esterco que o animal produz.
+Ainda não é o que se pode aproveitar.
+
+Etapa 2 — coproduto → parcela coletável
+---------------------------------------
+
+    q_energetico_t = q_coproduto_t × fcoleta
+
+  Termo           Coluna          Unidade
+  --------------  --------------  --------------------
+  taxa de coleta  fcoleta         adimensional (0 a 1)
+  resultado       q_energetico_t  t
+
+fcoleta é a fração que se pode efetivamente recolher, descontando o que precisa
+permanecer no solo por razões agronômicas e o que se perde na operação.
+
+A partir daqui a cadeia se bifurca conforme a rota tecnológica declarada em
+rotas_possiveis.
+
+Etapa 3a — densificação (combustível sólido)
+--------------------------------------------
+
+    qct = q_energetico_t × fdens × materia_seca
+
+  Termo                  Coluna        Unidade
+  ---------------------  ------------  -----------------------------------------
+  fator de densificação  fdens         ver fdens_unid, tipicamente tbs/tbs
+  teor de matéria seca   materia_seca  adimensional (0 a 1)
+  resultado              qct           t — grandeza intermediária, não publicada
+
+materia_seca converte massa úmida em massa seca: uma palha com materia_seca = 0,9 tem
+90% de massa seca. fdens_unid = tbs/tbs indica que o fator de densificação já opera em
+base seca (tonelada base seca por tonelada base seca), razão pela qual a matéria seca
+precisa ser aplicada antes.
+
+    Atenção ao comparar com o Power BI. Esta é a etapa onde o arquivo e o modelo em
+    produção divergem. Ver a seção final.
+
+Etapa 3b — biodigestão (biometano)
+----------------------------------
+
+    vct = q_energetico_t × fmetanizacao ÷ 1000
+
+  Termo                     Coluna        Unidade
+  ------------------------  ------------  ----------------------------------------------
+  potencial de metanização  fmetanizacao  m³ de biometano por t de coproduto
+  resultado                 vct           mil m³ — grandeza intermediária, não publicada
+
+A divisão por 1000 é conversão de unidade: t × m³/t = m³, e o passo seguinte opera em
+mil m³.
+
+Note que materia_seca não entra nesta rota — o potencial de metanização já é
+expresso por tonelada de coproduto tal como coletado.
+
+Nos coprodutos medidos em volume — vinhaça, torta de filtro e os três resíduos de
+indústria de abate — fmetanizacao está em Nm³ de metano por m³ de resíduo. A
+fórmula é a mesma: o fator multiplica q_energetico_t, que ali carrega metros cúbicos.
+A unidade do fator sempre acompanha a de fcoprod, legível em fcoprod_unid.
+
+Etapa 4 — combustível → energia
+-------------------------------
+
+A mesma fórmula fecha as duas rotas:
+
+    potencial_rota_densificacao_ktep = qct ÷ 1000 × pci_densificacao
+    potencial_rota_biodigestao_ktep  = vct ÷ 1000 × pci_biodigestao
+
+  Termo                      Coluna            Unidade
+  -------------------------  ----------------  --------------
+  PCI do combustível sólido  pci_densificacao  tep/t
+  PCI do biometano           pci_biodigestao   tep por mil m³
+
+A divisão por 1000 leva o resultado de tep para ktep (mil tep).
+
+De onde vem o PCI
+.................
+
+O poder calorífico inferior é tabelado em kcal/kg (ou kcal/m³) e dividido por 10.000
+na leitura, o que o converte em fator tep. A conta:
+
+    1 tep = 10.000.000 kcal        1 t = 1.000 kg
+    3.820 kcal/kg × 1.000 kg/t = 3.820.000 kcal/t ÷ 10.000.000 = 0,382 tep/t
+
+Os quatro combustíveis do modelo:
+
+  Combustível      Coluna onde aparece       PCI    Energéticos
+  ---------------  ------------------------  -----  -----------
+  Briquete         combustivel_densificacao  0,382  17
+  Carvão vegetal   combustivel_densificacao  0,646  2
+  Lenha comercial  combustivel_densificacao  0,310  2
+  Biometano        combustivel_biodigestao   0,880  20
+
+A relação entre coproduto e combustível é 1:1 dentro de cada rota — nenhum energético
+tem dois combustíveis na mesma rota. Por isso a coluna do nome do combustível basta para
+saber qual PCI foi aplicado, sem consultar tabela externa.
+
+------------------------------------------------------------------------------
+
+Regra de preenchimento
+----------------------
+
+    Uma coluna de fator está preenchida se, e somente se, ela entrou no cálculo daquela
+    linha.
+
+  rotas_possiveis  Colunas de densificação  Colunas de biodigestão
+  ---------------  -----------------------  ----------------------
+  Densificação     preenchidas              vazias
+  Biodigestão      vazias                   preenchidas
+  Biod. e Densif.  preenchidas              preenchidas
+  Nenhuma          vazias                   vazias
+
+Vazio e zero significam coisas diferentes: vazio é "esta rota não se aplica a este
+coproduto"; zero é "aplica-se, mas a produção daquele ano rendeu nada".
+
+Um caso concreto em que isso importa: a tabela de fatores do modelo traz, para os cinco
+estercos, uma linha de densificação com fdens = 0. Publicá-la produziria uma coluna de
+potencial igual a zero, sugerindo que a densificação foi avaliada e não rende — quando o
+correto é que densificar esterco não está no modelo. As colunas ficam vazias.
+
+------------------------------------------------------------------------------
+
+Exemplos conferidos
+-------------------
+
+Lavoura, dupla rota
+...................
+
+Alta Floresta D'Oeste/RO, 1987, Banana → Resíduo da Banana (Biod. e Densif.)
+
+    producao_t                     91,8 t
+      × fcoprod          1,2  →   110,16 t      = q_coproduto_t
+      × fcoleta          0,4  →    44,064 t     = q_energetico_t
+
+    densificação:
+      × fdens            1,0
+      × materia_seca     0,9  →    39,6576 t    = qct
+      ÷ 1000 × pci     0,382  →     0,0151492032 ktep
+
+    biodigestão:
+      × fmetanizacao     250
+      ÷ 1000            →    11,016 mil m³      = vct
+      ÷ 1000 × pci      0,88  →     0,00969408  ktep
+
+Pecuária, rota única
+....................
+
+Alta Floresta D'Oeste/RO, 1987, Bovino de corte → Esterco Bov. corte (Biodigestão)
+
+    rebanho                    13.226 cabeças
+      × fcoprod         5,475  →   72.412,35 t       = q_coproduto_t
+      × fcoleta           0,8  →   57.929,88 t       = q_energetico_t
+
+    biodigestão:
+      × fmetanizacao       17
+      ÷ 1000             →      984,80796 mil m³ = vct
+      ÷ 1000 × pci      0,88  →   0,8666310048   ktep
+
+    densificação: vazia — a rota não se aplica ao esterco
+
+Indústria de abate, base em cabeças
+...................................
+
+Corumbá/MS, 2021, Carcaça de bovino - Total → Resíduos de indústria de abate - Bovinos
+(Biodigestão)
+
+    abate                 293.942,414079 cabeças
+      × fcoprod           1,1  →  323.336,655487 m³ de efluente = q_coproduto_t
+      × fcoleta           1,0  →  323.336,655487 m³             = q_energetico_t
+
+    biodigestão:
+      × fmetanizacao  4,76026  →  1.539.166,547648 Nm³ de CH₄
+      ÷ 1000                   →      1.539,166548 mil m³ = vct
+      ÷ 1000 × pci       0,88  →         1,354467  ktep
+
+    densificação: vazia — a rota não se aplica ao efluente de abate
+    producao_t: vazia — o peso de carcaça existe na fonte, mas não é a base desta conta
+
+Aqui q_coproduto_t e q_energetico_t carregam metros cúbicos, não toneladas: é o
+que fcoprod_unid = m³/cabeça abatida declara. A aritmética é a mesma das outras linhas.
+
+    abate vem com parte fracionária em praticamente todas as linhas (422.392 de 422.435).
+    O abate é apurado por unidade da federação e rateado até o município na base de origem,
+    de modo que o valor municipal é uma estimativa contínua, e não uma contagem de
+    animais. Isso não afeta a unidade — a razão producao_t × 1000 ÷ abate tem mediana de
+    231 kg para bovinos, 81 kg para suínos e 2,0 kg para aves, exatamente os pesos de
+    carcaça —, mas convém saber ao ler um município isolado.
+
+Os três exemplos foram recalculados à mão contra o arquivo publicado e batem dígito a
+dígito. A mesma conferência roda automaticamente sobre as 6,2 milhões de linhas a cada
+geração (dados_abertos._conferir_cadeia).
+
+------------------------------------------------------------------------------
+
+Onde isto diverge do Power BI
+-----------------------------
+
+Duas diferenças, ambas deliberadas e documentadas. Quem comparar linha a linha vai
+encontrá-las nesta ordem.
+
+1. materia_seca — defeito no modelo em produção
+...............................................
+
+O arquivo traz o valor correto (0,9 / 0,5 / 0,976 / 0,125…). O Power BI traz 9, 5,
+976 e 125, porque a query dim_energetico converte o CSV na cultura pt-BR, onde o ponto
+decimal é lido como separador de milhar. Matéria seca é uma fração: por definição
+0 < ms ≤ 1, e 38 das 51 linhas do modelo violam esse limite.
+
+Consequência: qct — e portanto todo o potencial da rota de densificação — sai
+superestimado de 10× a 1000× por linha, 22× no agregado. O biometano não é afetado,
+porque vct não usa materia_seca.
+
+Efeito mais grave: a razão entre as rotas fica distorcida. Para um coproduto de dupla
+rota, materia_seca aparece só no numerador dessa razão, de modo que a densificação
+aparenta render de 15 a 1.700 vezes mais que a biodigestão, quando a vantagem real é de
+~1,56×.
+
+Diagnóstico completo, com a correção em M e o procedimento de verificação:
+ERRO_MATERIA_SECA.txt.
+
+2. Rota-pura x cenário de rota
+..............................
+
+O Power BI aplica fator_rota e reparte os coprodutos de dupla rota entre três cenários
+(100% densificação, meio-a-meio, 100% biodigestão). Este arquivo não usa fator_rota:
+avalia cada rota isoladamente, como se 100% do coproduto seguisse por ela.
+
+Para um coproduto de rota única os dois coincidem. Para um de dupla rota, o valor daqui
+corresponde ao cenário extremo correspondente — e as duas colunas, somadas, contariam o
+mesmo coproduto duas vezes.
+
+------------------------------------------------------------------------------
+
+Reprodução
+----------
+
+    cd etl_sienergia
+    python dados_abertos.py
+
+Lê X:\SIEnergia\bd\csv_exportado\ (somente leitura) e grava
+saida/sienergia_potencial_energetico_mu.csv. Ao final imprime os totais, o padrão de
+preenchimento por rota e a autoconferência das quatro identidades deste memorial.

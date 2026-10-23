@@ -1,0 +1,87 @@
+ParameterName,Description,Expression,ModifiedTime
+fator_produto_energetico,,"let
+    Fonte = Csv.Document(File.Contents(bis_outputs & ""fatores_produto_energetico.csv""),[Delimiter="";"", Columns=7, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+    #""Cabeçalhos Promovidos"" = Table.PromoteHeaders(Fonte, [PromoteAllScalars=true]),
+    #""Tipo Alterado"" = Table.TransformColumnTypes(#""Cabeçalhos Promovidos"",{{""fcoprod"", type number}, {""fcoleta"", type number}, {""cd_produto"", Int64.Type}, {""cd_energetico"", Int64.Type}}),
+    #""Linhas Classificadas"" = Table.Sort(#""Tipo Alterado"",{{""cd_energetico"", Order.Ascending}})
+in
+    #""Linhas Classificadas""",2024-12-17 15:11:31
+fator_energetico_combustivel,,"let
+    Fonte = Csv.Document(File.Contents(bis_outputs & ""fatores_energetico_combustivel.csv""),[Delimiter="";"", Columns=7, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+    #""Cabeçalhos Promovidos"" = Table.PromoteHeaders(Fonte, [PromoteAllScalars=true]),
+    #""Tipo Alterado1"" = Table.TransformColumnTypes(#""Cabeçalhos Promovidos"",{{""fdens"", type number}, {""fmetanizacao"", type number}, {""cd_energetico"", Int64.Type}, {""cd_combustivel"", Int64.Type}}),
+    #""PAdicionada - rota_modelo"" = Table.AddColumn(#""Tipo Alterado1"", ""rota_modelo"", each if [fmetanizacao] = null then ""Densificação"" else if [fdens] = null then ""Biodigestão"" else null)
+in
+    #""PAdicionada - rota_modelo""",2024-12-17 15:11:31
+galosina_mu,,"let
+    Fonte = Csv.Document(File.Contents(""X:\SIEnergia\BASE DE DADOS\ANP\vendas-anuais-de-gasolina-c-por-municipio.csv""),[Delimiter="";"", Columns=7, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+    #""Cabeçalhos Promovidos"" = Table.PromoteHeaders(Fonte, [PromoteAllScalars=true]),
+    #""Colunas Renomeadas"" = Table.RenameColumns(#""Cabeçalhos Promovidos"",{{""VENDAS"", ""venda_litro""}, {""CÓDIGO IBGE"", ""cd_mu""}, {""ANO"", ""ano""}}),
+    #""Colunas Removidas"" = Table.RemoveColumns(#""Colunas Renomeadas"",{""MUNICÍPIO""}),
+    #""Tipo Alterado"" = Table.TransformColumnTypes(#""Colunas Removidas"",{{""venda_litro"", Int64.Type}, {""cd_mu"", Int64.Type}, {""ano"", Int64.Type}}),
+    #""Personalização Adicionada1"" = Table.AddColumn(#""Tipo Alterado"", ""combustivel"", each ""Gasolina automotiva""),
+    #""Colunas Removidas1"" = Table.RemoveColumns(#""Personalização Adicionada1"",{""GRANDE REGIÃO"", ""UF"", ""PRODUTO""})
+in
+    #""Colunas Removidas1""",2026-04-02 12:14:52
+diesel_mu,,"let
+    Fonte = Csv.Document(File.Contents(""X:\SIEnergia\BASE DE DADOS\ANP\vendas-anuais-de-oleo-diesel-por-municipio.csv""),[Delimiter="";"", Columns=7, Encoding=65001, QuoteStyle=QuoteStyle.None]),
+    #""Cabeçalhos Promovidos"" = Table.PromoteHeaders(Fonte, [PromoteAllScalars=true]),
+    #""Colunas Renomeadas"" = Table.RenameColumns(#""Cabeçalhos Promovidos"",{{""VENDAS"", ""venda_litro""}, {""CÓDIGO IBGE"", ""cd_mu""}, {""ANO"", ""ano""}}),
+    #""Colunas Removidas"" = Table.RemoveColumns(#""Colunas Renomeadas"",{""MUNICÍPIO""}),
+    #""Tipo Alterado"" = Table.TransformColumnTypes(#""Colunas Removidas"",{{""venda_litro"", Int64.Type}, {""cd_mu"", Int64.Type}, {""ano"", Int64.Type}}),
+    #""Personalização Adicionada1"" = Table.AddColumn(#""Tipo Alterado"", ""combustivel"", each ""Óleo diesel""),
+    #""Colunas Removidas1"" = Table.RemoveColumns(#""Personalização Adicionada1"",{""GRANDE REGIÃO"", ""UF"", ""PRODUTO""})
+in
+    #""Colunas Removidas1""",2026-04-02 12:14:52
+fato_produto_uf,,"let
+    Fonte = Csv.Document(File.Contents(bis_outputs & ""fatos_hist_uf.csv""),[Delimiter="";"", Columns=9, Encoding=1252, QuoteStyle=QuoteStyle.None]),
+    #""Cabeçalhos Promovidos"" = Table.PromoteHeaders(Fonte, [PromoteAllScalars=true])
+in
+    #""Cabeçalhos Promovidos""",2024-12-17 15:11:31
+trechos,,"let
+    Fonte = Excel.Workbook(File.Contents(""X:\Biocombustiveis - Diretorio\Técnico\Produtos\SIEnergia\BASE DE DADOS\CAMINHOS DA SAFRA\caminhos_safra.xlsx""), null, true),
+    trechos_Sheet = Fonte{[Item=""trechos"",Kind=""Sheet""]}[Data],
+    #""Cabeçalhos Promovidos"" = Table.PromoteHeaders(trechos_Sheet, [PromoteAllScalars=true]),
+    #""Outras Colunas Removidas"" = Table.SelectColumns(#""Cabeçalhos Promovidos"",{""CD_MUN""}),
+    #""Duplicatas Removidas"" = Table.Distinct(#""Outras Colunas Removidas"")
+in
+    #""Duplicatas Removidas""",2026-01-19 19:08:30
+fato_produto_teste,,"let
+    Fonte = fato_produto,
+    #""Linhas Filtradas"" = Table.SelectRows(Fonte, each ([ano] = 2023)),
+    #""Linhas Agrupadas"" = Table.Group(#""Linhas Filtradas"", {""cd_produto""}, {{""area_ha"", each List.Sum([area_ha]), type nullable number}, {""producao_t"", each List.Sum([producao_t]), type nullable number}}),
+    #""Consultas Mescladas"" = Table.NestedJoin(#""Linhas Agrupadas"", {""cd_produto""}, dim_produto, {""cd_produto""}, ""dim_produto"", JoinKind.LeftOuter),
+    #""dim_produto Expandido"" = Table.ExpandTableColumn(#""Consultas Mescladas"", ""dim_produto"", {""produto"", ""cd_subclasse""}, {""produto"", ""cd_subclasse""}),
+    #""Consultas Mescladas1"" = Table.NestedJoin(#""dim_produto Expandido"", {""cd_subclasse""}, dim_subclasse, {""cd_subclasse""}, ""dim_subclasse"", JoinKind.LeftOuter),
+    #""dim_subclasse Expandido"" = Table.ExpandTableColumn(#""Consultas Mescladas1"", ""dim_subclasse"", {""s3_grupo"", ""s4_divisao""}, {""s3_grupo"", ""s4_divisao""})
+in
+    #""dim_subclasse Expandido""",2024-10-11 19:51:44
+dim_subclasse_produto,,"let
+    Fonte = fato_produto,
+    #""Outras Colunas Removidas"" = Table.SelectColumns(Fonte,{""cd_produto""}),
+    #""Duplicatas Removidas"" = Table.Distinct(#""Outras Colunas Removidas"")
+in
+    #""Duplicatas Removidas""",2024-10-11 20:05:46
+fato_produto_br teste,,"let
+    Fonte = fato_produto,
+    #""Linhas Filtradas"" = Table.SelectRows(Fonte, each ([ano] = 2022)),
+    #""Linhas Agrupadas"" = Table.Group(#""Linhas Filtradas"", {""ano"", ""cd_origem"", ""cd_produto""}, {{""producao_t"", each List.Sum([producao_t]), type nullable number}})
+in
+    #""Linhas Agrupadas""",2026-01-19 19:08:30
+bis_data,Caminho para a Base de Dados do SIEnergia,"""C:/Users/daniel.coelho/OneDrive - epe.gov.br/bis/data/"" meta [IsParameterQuery=true, Type=""Text"", IsParameterQueryRequired=true]",2024-12-17 15:18:08
+bis_outputs,Caminho para a Base de Dados do SIEnergia,"""X:\SIEnergia\bd\csv_exportado\"" meta [IsParameterQuery=true, Type=""Text"", IsParameterQueryRequired=true]",2026-02-11 14:29:50
+Erros em fato_produto,,"let
+Fonte = fato_produto,
+  #""Incompatibilidades de Tipo Detectadas"" = let
+    tableWithOnlyPrimitiveTypes = Table.SelectColumns(Fonte, Table.ColumnsOfType(Fonte, {type nullable number, type nullable text, type nullable logical, type nullable date, type nullable datetime, type nullable datetimezone, type nullable time, type nullable duration})),
+    recordTypeFields = Type.RecordFields(Type.TableRow(Value.Type(tableWithOnlyPrimitiveTypes))),
+    fieldNames = Record.FieldNames(recordTypeFields),
+    fieldTypes = List.Transform(Record.ToList(recordTypeFields), each [Type]),
+    pairs = List.Transform(List.Positions(fieldNames), (i) => {fieldNames{i}, (v) => if v = null or Value.Is(v, fieldTypes{i}) then v else error [Message = ""O tipo do valor não corresponde ao tipo da coluna."", Detail = v], fieldTypes{i}})
+in
+    Table.TransformColumns(Fonte, pairs),
+  #""Índice Adicionado"" = Table.AddIndexColumn(#""Incompatibilidades de Tipo Detectadas"", ""Número da Linha"" ,1),
+  #""Erros Mantidos"" = Table.SelectRowsWithErrors(#""Índice Adicionado"", {""cd_mu"", ""cd_produto"", ""cd_origem"", ""ano"", ""area_ha"", ""producao_t"", ""valor"", ""rebanho"", ""produto_ibge"", ""abate""}),
+  #""Colunas Reordenadas"" = Table.ReorderColumns(#""Erros Mantidos"", {""Número da Linha"", ""cd_mu"", ""cd_produto"", ""cd_origem"", ""ano"", ""area_ha"", ""producao_t"", ""valor"", ""rebanho"", ""produto_ibge"", ""abate""})
+in
+  #""Colunas Reordenadas""",2026-02-11 14:42:05

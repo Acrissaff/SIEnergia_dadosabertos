@@ -1,0 +1,1 @@
+"X:\SIEnergia\bd\csv_exportado\" meta [IsParameterQuery=true, Type="Text", IsParameterQueryRequired=true]

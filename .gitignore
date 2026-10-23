@@ -1,0 +1,25 @@
+# Saídas geradas e dados operacionais
+saida/
+validacao/
+backup/
+
+# Fontes locais do modelo e arquivos de máquina
+*.pbix
+*.pkl
+*.parquet
+*.sqlite
+*.db
+
+# Ambientes, caches e temporários Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.log
+
+# Arquivos temporários do editor e do sistema
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini

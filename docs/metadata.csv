@@ -1,0 +1,3 @@
+Name,Value
+__PBI_TimeIntelligenceEnabled,1
+PBI_QueryOrder,"[""fato_produto_uf"",""fato_produto"",""fato_energetico"",""fato_combustivel"",""dim_ano"",""dim_mu"",""dim_subclasse"",""dim_produto"",""dim_energetico"",""dim_combustivel"",""fator_produto_energetico"",""fator_energetico_combustivel"",""fator_rota"",""dim_uf"",""dim_rota"",""dim_rota_modelo"",""dim_rota_cenario"",""dim_rotas_possiveis"",""fato_populacao_mu"",""diesel_mu"",""galosina_mu"",""derivados_petroleo_mu"",""dim_combustiveis_venda"",""trechos"",""dim_caminho"",""fato_produto_teste"",""dim_subclasse_produto"",""fato_produto_br teste"",""bis_data"",""bis_outputs"",""vendas-anuais-de-oleo-diesel-por-municipio"",""Erros em fato_produto""]"
